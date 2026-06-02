@@ -43,8 +43,6 @@ ENV BLOCK_THRESHOLD=0.75
 ENV FLAG_THRESHOLD=0.5
 ENV DATABASE_PATH=/data/proxy.db
 
-# Data volume for SQLite persistence
-VOLUME ["/data"]
 
 EXPOSE 8000
 
