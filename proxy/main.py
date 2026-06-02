@@ -84,10 +84,6 @@ def authenticate_api_key(api_key: str) -> Optional[str]:
         conn.close()
 
 
-        conn.commit()
-        logger.info("Database initialized at %s", DATABASE_PATH)
-    finally:
-        conn.close()
 
 
 def log_request(
