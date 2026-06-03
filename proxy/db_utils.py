@@ -5,21 +5,30 @@ import pandas as pd
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 DATABASE_PATH = os.getenv("DATABASE_PATH", "./proxy.db")
 
+class DBConnectionWrapper:
+    def __init__(self, conn, is_pg=False):
+        self.conn = conn
+        self.is_pg = is_pg
+
+    def execute(self, query, params=()):
+        if self.is_pg:
+            query = query.replace("?", "%s")
+        cursor = self.conn.cursor()
+        cursor.execute(query, params)
+        return cursor
+
+    def commit(self):
+        self.conn.commit()
+
+    def close(self):
+        self.conn.close()
+
 def get_db_connection():
     if DATABASE_URL.startswith("postgres"):
         import psycopg2
         import psycopg2.extras
         conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.DictCursor)
-        # Add a convenience execute method to act like sqlite3.Connection.execute
-        if not hasattr(conn, "_execute_bound"):
-            original_commit = conn.commit
-            def execute(query, params=()):
-                query = query.replace("?", "%s")
-                cursor = conn.cursor()
-                cursor.execute(query, params)
-                return cursor
-            conn.execute = execute
-        return conn
+        return DBConnectionWrapper(conn, is_pg=True)
     else:
         conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
         conn.row_factory = sqlite3.Row
@@ -103,7 +112,9 @@ def query_db_df(query: str, params: tuple = (), conn=None) -> pd.DataFrame:
         query = query.replace("?", "%s")
         
     try:
-        return pd.read_sql_query(query, conn, params=params)
+        # Pandas requires the raw DBAPI connection object, not our wrapper
+        raw_conn = conn.conn if hasattr(conn, "conn") else conn
+        return pd.read_sql_query(query, raw_conn, params=params)
     except Exception as e:
         print(f"DB Error: {e}")
         return pd.DataFrame()
