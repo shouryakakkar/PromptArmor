@@ -40,7 +40,7 @@ def init_db() -> None:
     try:
         is_pg = DATABASE_URL.startswith("postgres")
         
-        id_type = "SERIAL PRIMARY KEY" if is_pg else "INTEGER PRIMARY KEY AUTOINCREMENT"
+        id_type = "TEXT PRIMARY KEY"
         
         # Users table
         conn.execute(
@@ -91,6 +91,13 @@ def init_db() -> None:
             )
             """
         )
+        
+        if is_pg:
+            try:
+                # Fix for previously created SERIAL column in Postgres
+                conn.execute("ALTER TABLE requests ALTER COLUMN id TYPE TEXT")
+            except Exception:
+                pass
         
         if not is_pg:
             try:

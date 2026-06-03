@@ -403,6 +403,12 @@ if page == "🎮 Playground":
                     },
                     timeout=20,
                 )
+                
+                # If the proxy crashes, don't silently mark the prompt as "ALLOWED"
+                if resp.status_code >= 500:
+                    st.error(f"Proxy Internal Error: {resp.text}")
+                    st.stop()
+                    
                 body = resp.json()
                 status = resp.status_code
             except httpx.ConnectError:
