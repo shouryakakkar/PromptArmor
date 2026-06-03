@@ -393,8 +393,10 @@ if page == "🎮 Playground":
 
         with st.spinner("Running detection pipeline..."):
             try:
+                # Strip trailing slashes from PROXY_URL to prevent 307 redirects, and follow them if they happen
+                base_url = PROXY_URL.rstrip('/')
                 resp = httpx.post(
-                    f"{PROXY_URL}/v1/chat/completions",
+                    f"{base_url}/v1/chat/completions",
                     json={"model": "gpt-4o-mini", "messages": messages},
                     headers={
                         "Content-Type": "application/json",
@@ -402,11 +404,11 @@ if page == "🎮 Playground":
                         "X-Upstream-Key": upstream_key.strip()
                     },
                     timeout=20,
+                    follow_redirects=True,
                 )
-                
-                # If the proxy crashes, don't silently mark the prompt as "ALLOWED"
-                if resp.status_code >= 500:
-                    st.error(f"Proxy Internal Error: {resp.text}")
+                # Expose any errors or redirects from the proxy/upstream
+                if (resp.status_code >= 400 and resp.status_code != 400) or resp.status_code in (307, 308):
+                    st.error(f"API Error ({resp.status_code}): {resp.text}")
                     st.stop()
                     
                 body = resp.json()
