@@ -344,26 +344,48 @@ if page == "🎮 Playground":
 
     st.markdown("---")
 
+    with st.expander("⚙️ Configuration & Authentication", expanded=True):
+        st.markdown("Configure the keys and LLM provider required to test the prompt.")
+        
+        col_k1, col_k2 = st.columns(2)
+        with col_k1:
+            pa_key = st.text_input(
+                "PromptArmor API Key",
+                type="password",
+                placeholder="pa-...",
+                help="Your PromptArmor API key from the '🔑 API Keys' tab.",
+            )
+        with col_k2:
+            upstream_key = st.text_input(
+                "Upstream LLM API Key",
+                type="password",
+                placeholder="sk-... or AIza...",
+                help="Required to forward the request to the upstream LLM.",
+            )
+            
+        st.markdown("---")
+        
+        col_p1, col_p2, col_p3 = st.columns([1, 1, 2])
+        
+        PROVIDER_DEFAULTS = {
+            "OpenAI": {"model": "gpt-4o-mini", "url": "https://api.openai.com/v1"},
+            "Gemini": {"model": "gemini-1.5-flash", "url": "https://generativelanguage.googleapis.com/v1beta/openai"},
+            "Groq": {"model": "llama3-70b-8192", "url": "https://api.groq.com/openai/v1"},
+            "DeepSeek": {"model": "deepseek-chat", "url": "https://api.deepseek.com/v1"},
+            "Custom": {"model": "", "url": ""}
+        }
+        
+        with col_p1:
+            provider_choice = st.selectbox("Provider", list(PROVIDER_DEFAULTS.keys()))
+            
+        with col_p2:
+            model_name = st.text_input("Model Name", value=PROVIDER_DEFAULTS[provider_choice]["model"])
+            
+        with col_p3:
+            upstream_base = st.text_input("Upstream Base URL", value=PROVIDER_DEFAULTS[provider_choice]["url"])
+
     # --- Input form ---
     with st.form("playground_form", clear_on_submit=False):
-        with st.expander("🔑 Authentication Details", expanded=True):
-            st.markdown("Configure the keys required to authenticate and forward this test request.")
-            col_k1, col_k2 = st.columns(2)
-            with col_k1:
-                pa_key = st.text_input(
-                    "PromptArmor API Key",
-                    type="password",
-                    placeholder="pa-...",
-                    help="Your PromptArmor API key from the '🔑 API Keys' tab.",
-                )
-            with col_k2:
-                upstream_key = st.text_input(
-                    "Upstream LLM API Key (OpenAI/Gemini)",
-                    type="password",
-                    placeholder="sk-...",
-                    help="Required to forward the request to the upstream LLM.",
-                )
-
         system_prompt = st.text_area(
             "System prompt (optional)",
             height=68,
@@ -397,11 +419,12 @@ if page == "🎮 Playground":
                 base_url = PROXY_URL.rstrip('/')
                 resp = httpx.post(
                     f"{base_url}/v1/chat/completions",
-                    json={"model": "gpt-4o-mini", "messages": messages},
+                    json={"model": model_name.strip(), "messages": messages},
                     headers={
                         "Content-Type": "application/json",
                         "Authorization": f"Bearer {pa_key.strip()}",
-                        "X-Upstream-Key": upstream_key.strip()
+                        "X-Upstream-Key": upstream_key.strip(),
+                        "X-Upstream-Base": upstream_base.strip()
                     },
                     timeout=20,
                     follow_redirects=True,
