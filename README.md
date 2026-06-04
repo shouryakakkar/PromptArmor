@@ -1,13 +1,15 @@
 # 🛡️ PromptArmor
 
-**PromptArmor** is a production-ready LLM prompt injection detection proxy that sits between your application and any OpenAI-compatible LLM API. It intercepts every user message through a 4-layer detection pipeline — combining fast regex heuristics, a fine-tuned DistilBERT classifier, semantic embedding analysis, and an LLM-as-judge meta-classifier — blocking injections before they reach your model. It supports RAG/indirect injection detection, adversarial robustness evaluation via a built-in fuzzer, and a real-time Streamlit monitoring dashboard.
+**PromptArmor** is a production-ready LLM prompt injection detection proxy that sits between your application and any OpenAI-compatible LLM API. It intercepts every user message through a 4-layer detection pipeline — combining fast regex heuristics, a fine-tuned DistilBERT classifier, semantic embedding analysis, and an LLM-as-judge meta-classifier — blocking injections before they reach your model. 
+
+It supports **Multi-LLM routing** (OpenAI, Gemini, Groq, DeepSeek), **streaming responses**, adversarial robustness evaluation via a built-in fuzzer, and a real-time Streamlit monitoring dashboard with PostgreSQL-backed API key management.
 
 ---
 
 ## Architecture
 
 ```
-Client Application
+Client Application (Python SDK / LangChain / cURL)
        │
        ▼ POST /v1/chat/completions
 ┌──────────────────────────────────────────────────────────┐
@@ -37,16 +39,54 @@ Client Application
 │  score ≥ 0.50 → Forward + X-Injection-Warning header    │
 │  score < 0.50 → Forward cleanly                         │
 │                                                          │
-│  All requests logged → SQLite                            │
+│  All requests logged asynchronously to PostgreSQL       │
 └──────────────────────────────────────────────────────────┘
        │
-       ▼ (clean requests only)
-  Upstream LLM API (OpenAI / Anthropic / etc.)
+       ▼ (clean requests only, automatically routed)
+  Upstream LLM API (OpenAI / Gemini / Groq / DeepSeek)
 ```
 
 ---
 
-## Quickstart
+## Features
+
+- **Zero-Code Integration:** Perfectly mirrors the OpenAI `/v1/chat/completions` API specification. Works instantly with the official `openai` SDK and LangChain.
+- **Multi-LLM Support:** Forward clean prompts to **OpenAI, Gemini, Groq, or DeepSeek** simply by providing the API key and setting the `X-Upstream-Base` header.
+- **Streaming Native:** Full support for `stream=True`, returning server-sent events (SSE) back to the client with sub-millisecond overhead.
+- **Multi-Tenant Dashboard:** Beautiful Streamlit dashboard with user authentication (bcrypt/JWT), API Key generation, and interactive prompt testing playground.
+- **Production Database:** Seamlessly switches between SQLite for local testing and PostgreSQL for production deployments.
+- **Dockerized:** Fully dockerized proxy and dashboard, ready to deploy on Railway or AWS.
+
+---
+
+## Developer Integration
+
+PromptArmor works natively with any OpenAI-compatible SDK. You only need a PromptArmor API Key (generated from the Dashboard) and your upstream LLM API key.
+
+### Python (OpenAI SDK)
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://promptarmor-proxy.up.railway.app/v1",
+    api_key="pa-...", # PromptArmor Key
+    default_headers={
+        "X-Upstream-Key": "sk-...", # OpenAI, Gemini, or Groq Key
+        # If using Gemini/Groq, set the base URL:
+        # "X-Upstream-Base": "https://api.groq.com/openai/v1" 
+    }
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini", # Or gemini-1.5-flash, llama3-70b-8192, etc.
+    messages=[{"role": "user", "content": "Hello, world!"}]
+)
+```
+
+---
+
+## Quickstart (Local Development)
 
 ```bash
 # 1. Install dependencies
@@ -54,31 +94,20 @@ pip install -r requirements.txt
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env with your UPSTREAM_API_KEY
+# Edit .env with your UPSTREAM_API_KEY if testing locally
 
 # 3. Start the proxy
 uvicorn proxy.main:app --reload --port 8000
-```
 
-Your OpenAI client now works through the proxy by changing `base_url`:
-
-```python
-import openai
-client = openai.OpenAI(
-    api_key="your-key",
-    base_url="http://localhost:8000/v1",  # ← point here
-)
-response = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
+# 4. Open the Dashboard
+streamlit run dashboard/app.py
 ```
 
 ---
 
 ## Fine-tuning the Classifier
 
-The proxy works out-of-the-box with a rule-based fallback. For production accuracy, train the DistilBERT classifier:
+The proxy works out-of-the-box with a rule-based fallback. For production accuracy, train the internal DistilBERT classifier:
 
 ```bash
 # Generate augmented dataset + train the model (takes ~10 min on CPU, ~2 min on GPU)
@@ -91,35 +120,14 @@ python -m training.finetune
 
 ## Running the Adversarial Fuzzer
 
+Ensure your proxy has not broken its security constraints by running the adversarial fuzzer against it:
+
 ```bash
 # Start the proxy first, then:
 python -m attacker.fuzzer --target http://localhost:8000 --variants 3
 
 # Results saved to benchmarks/fuzzer_results.json
 # Prints bypass rate table to console
-```
-
----
-
-## Opening the Dashboard
-
-```bash
-streamlit run dashboard/app.py
-# Opens at http://localhost:8501
-```
-
----
-
-## Running Benchmarks
-
-```bash
-# Generate the test dataset first
-python -m training.dataset
-
-# Run offline evaluation (no proxy needed)
-python -m benchmarks.eval
-
-# Results: benchmarks/results.json + benchmarks/roc_curve.png
 ```
 
 ---
@@ -159,11 +167,9 @@ This is why PromptArmor layers semantic embedding comparison (to detect context 
 ## Roadmap
 
 - **Multimodal injection**: Text embedded in images (via vision model pre-screening before injection check)
-- **Streaming support**: Per-chunk inspection for streaming completions
 - **Per-tenant thresholds**: Different block/flag thresholds per API key or user group
 - **Active learning loop**: Flag uncertain cases for human review, retrain classifier on confirmed labels
 - **Webhook alerts**: POST to Slack/PagerDuty when injection rate spikes
-- **Red team reports**: Automated weekly PDF reports from fuzzer results
 
 ---
 
