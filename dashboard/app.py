@@ -919,63 +919,106 @@ elif page == "💻 Developer Guide":
 
     PROXY_URL = os.getenv("PROXY_URL", "http://localhost:8000").rstrip("/")
 
-    st.markdown("### 1. Python (Official OpenAI SDK)")
-    st.code(f"""from openai import OpenAI
+    tab_oai, tab_gem, tab_groq = st.tabs(["OpenAI", "Gemini", "Groq"])
+
+    with tab_oai:
+        st.markdown("### Python SDK")
+        st.code(f"""from openai import OpenAI
 
 client = OpenAI(
-    # Point the client to your PromptArmor Proxy URL
     base_url="{PROXY_URL}/v1",
-    
-    # Use the PromptArmor API key for authorization
-    api_key="pa-...", 
-    
-    # Pass your actual upstream LLM key (e.g. OpenAI/Gemini/Groq) in the headers
-    default_headers={{
-        "X-Upstream-Key": "sk-...",
-        
-        # Optional: Set upstream base if using Gemini/Groq/DeepSeek instead of OpenAI
-        # "X-Upstream-Base": "https://generativelanguage.googleapis.com/v1beta/openai" 
-    }}
+    api_key="pa-...", # PromptArmor Key
+    default_headers={{"X-Upstream-Key": "sk-..."}} # OpenAI Key
 )
 
 response = client.chat.completions.create(
     model="gpt-4o-mini",
-    messages=[
-        {{"role": "system", "content": "You are a helpful assistant."}},
-        {{"role": "user", "content": "Hello, world!"}}
-    ]
+    messages=[{{"role": "user", "content": "Hello, world!"}}]
 )
 print(response.choices[0].message.content)
 """, language="python")
 
-    st.markdown("### 2. LangChain")
-    st.code(f"""from langchain_openai import ChatOpenAI
+        st.markdown("### LangChain")
+        st.code(f"""from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     openai_api_base="{PROXY_URL}/v1",
     openai_api_key="pa-...",
-    model_kwargs={{
-        "extra_headers": {{
-            "X-Upstream-Key": "sk-..."
-        }}
+    model_kwargs={{"extra_headers": {{"X-Upstream-Key": "sk-..."}}}}
+)
+print(llm.invoke("Hello, world!").content)
+""", language="python")
+
+    with tab_gem:
+        st.markdown("### Python SDK")
+        st.code(f"""from openai import OpenAI
+
+client = OpenAI(
+    base_url="{PROXY_URL}/v1",
+    api_key="pa-...", # PromptArmor Key
+    default_headers={{
+        "X-Upstream-Key": "AIza...", # Gemini API Key
+        "X-Upstream-Base": "https://generativelanguage.googleapis.com/v1beta/openai"
     }}
 )
 
-response = llm.invoke("Hello, world!")
-print(response.content)
+response = client.chat.completions.create(
+    model="gemini-1.5-flash",
+    messages=[{{"role": "user", "content": "Hello, world!"}}]
+)
+print(response.choices[0].message.content)
 """, language="python")
 
-    st.markdown("### 3. cURL (Direct HTTP)")
-    st.code(f"""curl -X POST {PROXY_URL}/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer pa-..." \\
-  -H "X-Upstream-Key: sk-..." \\
-  -d '{{
-    "model": "gpt-4o-mini",
-    "messages": [{{"role": "user", "content": "Hello!"}}]
-  }}'
-""", language="bash")
+        st.markdown("### LangChain")
+        st.code(f"""from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    model="gemini-1.5-flash",
+    openai_api_base="{PROXY_URL}/v1",
+    openai_api_key="pa-...",
+    model_kwargs={{"extra_headers": {{
+        "X-Upstream-Key": "AIza...",
+        "X-Upstream-Base": "https://generativelanguage.googleapis.com/v1beta/openai"
+    }}}}
+)
+print(llm.invoke("Hello, world!").content)
+""", language="python")
+
+    with tab_groq:
+        st.markdown("### Python SDK")
+        st.code(f"""from openai import OpenAI
+
+client = OpenAI(
+    base_url="{PROXY_URL}/v1",
+    api_key="pa-...", # PromptArmor Key
+    default_headers={{
+        "X-Upstream-Key": "gsk_...", # Groq API Key
+        "X-Upstream-Base": "https://api.groq.com/openai/v1"
+    }}
+)
+
+response = client.chat.completions.create(
+    model="llama3-70b-8192",
+    messages=[{{"role": "user", "content": "Hello, world!"}}]
+)
+print(response.choices[0].message.content)
+""", language="python")
+
+        st.markdown("### LangChain")
+        st.code(f"""from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    model="llama3-70b-8192",
+    openai_api_base="{PROXY_URL}/v1",
+    openai_api_key="pa-...",
+    model_kwargs={{"extra_headers": {{
+        "X-Upstream-Key": "gsk_...",
+        "X-Upstream-Base": "https://api.groq.com/openai/v1"
+    }}}}
+)
+print(llm.invoke("Hello, world!").content)
+""", language="python")
 
 # ---------------------------------------------------------------------------
 # Page 5 — API Keys
