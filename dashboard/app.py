@@ -245,7 +245,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigation",
-        ["🎮 Playground", "📊 Overview", "🚨 Detections", "🔬 Layer Performance", "🔴 Fuzzer Results", "🔑 API Keys"],
+        ["🎮 Playground", "📊 Overview", "🚨 Detections", "🔬 Layer Performance", "💻 Developer Guide", "🔑 API Keys"],
         label_visibility="collapsed",
     )
 
@@ -910,111 +910,72 @@ elif page == "🔬 Layer Performance":
 
 
 # ---------------------------------------------------------------------------
-# Page 4 — Fuzzer Results
+# Page 4 — Developer Guide
 # ---------------------------------------------------------------------------
 
-elif page == "🔴 Fuzzer Results":
-    st.title("🔴 Adversarial Fuzzer Results")
+elif page == "💻 Developer Guide":
+    st.title("💻 Developer Guide")
+    st.markdown("Integrate PromptArmor into your existing AI application with zero code changes. Since PromptArmor mirrors the OpenAI API specification, you just need to update your Base URL and API Keys.")
 
-    fuzzer_path = Path(FUZZER_RESULTS_PATH)
-    if not fuzzer_path.exists():
-        st.info(
-            f"No fuzzer results found at `{FUZZER_RESULTS_PATH}`.\n\n"
-            "Run the fuzzer first:\n```\npython -m attacker.fuzzer\n```"
-        )
-    else:
-        with open(fuzzer_path, "r", encoding="utf-8") as f:
-            fuzzer_data = json.load(f)
+    PROXY_URL = os.getenv("PROXY_URL", "http://localhost:8000").rstrip("/")
 
-        # Summary metrics
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Variants", fuzzer_data.get("total_variants", "—"))
-        c2.metric("Total Bypassed", fuzzer_data.get("total_bypassed", "—"))
-        bypass_rate = fuzzer_data.get("bypass_rate", 0)
-        c3.metric("Overall Bypass Rate", f"{bypass_rate*100:.1f}%")
-        c4.metric(
-            "Generated At",
-            fuzzer_data.get("generated_at", "—")[:10] if fuzzer_data.get("generated_at") else "—",
-        )
+    st.markdown("### 1. Python (Official OpenAI SDK)")
+    st.code(f"""from openai import OpenAI
 
-        st.markdown("---")
-        st.subheader("Bypass Rate by Variant Type")
+client = OpenAI(
+    # Point the client to your PromptArmor Proxy URL
+    base_url="{PROXY_URL}/v1",
+    
+    # Use the PromptArmor API key for authorization
+    api_key="pa-...", 
+    
+    # Pass your actual upstream LLM key (e.g. OpenAI/Gemini/Groq) in the headers
+    default_headers={{
+        "X-Upstream-Key": "sk-...",
+        
+        # Optional: Set upstream base if using Gemini/Groq/DeepSeek instead of OpenAI
+        # "X-Upstream-Base": "https://generativelanguage.googleapis.com/v1beta/openai" 
+    }}
+)
 
-        by_type = fuzzer_data.get("by_variant_type", {})
-        if by_type:
-            rows = []
-            for vtype, stats in by_type.items():
-                rate = stats.get("bypass_rate", 0) * 100
-                rows.append({
-                    "Variant Type": vtype,
-                    "Total": stats.get("total", 0),
-                    "Bypassed": stats.get("bypassed", 0),
-                    "Bypass Rate (%)": round(rate, 1),
-                    "High Risk": "⚠ YES" if rate > 20 else "✓ OK",
-                })
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[
+        {{"role": "system", "content": "You are a helpful assistant."}},
+        {{"role": "user", "content": "Hello, world!"}}
+    ]
+)
+print(response.choices[0].message.content)
+""", language="python")
 
-            df_fuzzer = pd.DataFrame(rows).sort_values("Bypass Rate (%)", ascending=False)
+    st.markdown("### 2. LangChain")
+    st.code(f"""from langchain_openai import ChatOpenAI
 
-            # Color-code
-            def highlight_bypass(val):
-                if isinstance(val, float) and val > 20:
-                    return "color: #f87171; font-weight: bold"
-                elif isinstance(val, float) and val > 10:
-                    return "color: #fbbf24"
-                return "color: #34d399"
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_base="{PROXY_URL}/v1",
+    openai_api_key="pa-...",
+    model_kwargs={{
+        "extra_headers": {{
+            "X-Upstream-Key": "sk-..."
+        }}
+    }}
+)
 
-            st.dataframe(
-                df_fuzzer.style.applymap(highlight_bypass, subset=["Bypass Rate (%)"]),
-                use_container_width=True,
-                height=400,
-            )
+response = llm.invoke("Hello, world!")
+print(response.content)
+""", language="python")
 
-            # Bar chart
-            fig_fuzzer = px.bar(
-                df_fuzzer,
-                x="Variant Type",
-                y="Bypass Rate (%)",
-                color="Bypass Rate (%)",
-                color_continuous_scale=["#34d399", "#fbbf24", "#f87171"],
-                template=PLOTLY_TEMPLATE,
-                text="Bypass Rate (%)",
-            )
-            fig_fuzzer.add_hline(y=20, line_dash="dash", line_color=COLOR_BLOCKED,
-                                  annotation_text="20% threshold")
-            fig_fuzzer.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                height=350,
-                coloraxis_showscale=False,
-            )
-            st.plotly_chart(fig_fuzzer, use_container_width=True)
-
-            # High-risk callouts
-            high_risk = [r for r in rows if r["Bypass Rate (%)"] > 20]
-            if high_risk:
-                st.error(
-                    f"⚠ **{len(high_risk)} variant type(s) exceed 20% bypass rate** — "
-                    f"consider adding detection rules for: {', '.join(r['Variant Type'] for r in high_risk)}"
-                )
-            else:
-                st.success("✓ All variant types are below the 20% bypass rate threshold.")
-
-        # Raw results sample
-        raw_results = fuzzer_data.get("results", [])
-        if raw_results:
-            st.markdown("---")
-            st.subheader("Sample Bypass Cases")
-            bypassed = [r for r in raw_results if r.get("bypassed")]
-            if bypassed:
-                df_bypassed = pd.DataFrame(bypassed[:50])
-                if "variant_text" in df_bypassed:
-                    df_bypassed["variant_text"] = df_bypassed["variant_text"].str[:100] + "…"
-                st.dataframe(
-                    df_bypassed[["variant_type", "http_status", "response_score", "variant_text"]],
-                    use_container_width=True,
-                )
-            else:
-                st.success("No bypass cases in fuzzer results!")
+    st.markdown("### 3. cURL (Direct HTTP)")
+    st.code(f"""curl -X POST {PROXY_URL}/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer pa-..." \\
+  -H "X-Upstream-Key: sk-..." \\
+  -d '{{
+    "model": "gpt-4o-mini",
+    "messages": [{{"role": "user", "content": "Hello!"}}]
+  }}'
+""", language="bash")
 
 # ---------------------------------------------------------------------------
 # Page 5 — API Keys
