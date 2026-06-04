@@ -626,7 +626,7 @@ elif page == "📊 Overview":
             st.subheader("Requests Over Time")
             # Resample to hourly buckets
             df_time = df.copy()
-            df_time["hour"] = df_time["timestamp"].dt.floor("H")
+            df_time["hour"] = df_time["timestamp"].dt.floor("h")
             df_agg = df_time.groupby(["hour", "action_taken"]).size().reset_index(name="count")
 
             fig_line = px.line(
